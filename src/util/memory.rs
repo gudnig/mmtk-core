@@ -15,6 +15,11 @@ const MMAP_FLAGS: libc::c_int = libc::MAP_ANON | libc::MAP_PRIVATE | libc::MAP_F
 // MAP_FIXED is used instead of MAP_FIXED_NOREPLACE (which is not available on macOS). We are at the risk of overwriting pre-existing mappings.
 const MMAP_FLAGS: libc::c_int = libc::MAP_ANON | libc::MAP_PRIVATE | libc::MAP_FIXED;
 
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const MAP_JIT: libc::c_int = 0x800;
+#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
+const MAP_JIT: libc::c_int = 0;
+
 /// Strategy for performing mmap
 #[derive(Debug, Copy, Clone)]
 pub struct MmapStrategy {
@@ -244,6 +249,14 @@ fn mmap_fixed(
 ) -> Result<()> {
     let ptr = start.to_mut_ptr();
     let prot = strategy.prot.into_native_flags();
+
+    let mut flags = flags;
+    // Add MAP_JIT flag on Apple Silicon for any memory allocation
+    // (Apple Silicon requires this to avoid "Cannot allocate memory" errors)
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        flags |= MAP_JIT;
+    }
     wrap_libc_call(
         &|| unsafe { libc::mmap(start.to_mut_ptr(), size, prot, flags, -1, 0) },
         ptr,
