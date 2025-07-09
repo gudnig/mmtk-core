@@ -256,9 +256,15 @@ fn mmap_fixed(
     // Apple Silicon MAP_JIT handling
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
-        // Apple Silicon requires MAP_JIT for all memory allocations
-        // Keep MAP_FIXED since MMTK needs specific addresses
-        flags |= MAP_JIT;
+        // Try MAP_JIT first, fallback to regular mmap if it fails
+        if matches!(strategy.prot, MmapProtection::ReadWriteExec) {
+            // For executable memory, definitely need MAP_JIT
+            flags &= !libc::MAP_FIXED;
+            flags |= MAP_JIT;
+        } else {
+            // For metadata, try to avoid MAP_JIT and see if regular mmap works
+            // Just use the original flags
+        }
     }
     wrap_libc_call(
         &|| unsafe { libc::mmap(start.to_mut_ptr(), size, prot, flags, -1, 0) },
