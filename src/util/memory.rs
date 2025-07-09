@@ -253,9 +253,14 @@ fn mmap_fixed(
     let mut flags = flags;
     // Add MAP_JIT flag on Apple Silicon for any memory allocation
     // (Apple Silicon requires this to avoid "Cannot allocate memory" errors)
+    // Apple Silicon MAP_JIT handling
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
-        flags |= MAP_JIT;
+        // Remove MAP_FIXED when using MAP_JIT on Apple Silicon
+        if flags & MAP_JIT != 0 || matches!(strategy.prot, MmapProtection::ReadWriteExec) {
+            flags &= !libc::MAP_FIXED;  // Remove MAP_FIXED
+            flags |= MAP_JIT;           // Add MAP_JIT
+        }
     }
     wrap_libc_call(
         &|| unsafe { libc::mmap(start.to_mut_ptr(), size, prot, flags, -1, 0) },
